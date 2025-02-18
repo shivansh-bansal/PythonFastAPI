@@ -17,7 +17,7 @@ router = APIRouter(
     tags=["auth"]
 )
 
-SECRET_KEY = "b7e397746b185aea1d065e239b977798ee178c753faf3cb23c3ca189bd472300"
+SECRET_KEY = "adb6e944a6543a788661e6c823c31d15c7df2722a89af437b1369e9cb65bb941"
 ALGORITHM = "HS256"
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
@@ -39,8 +39,8 @@ def authenticateUser(username: str, password: str, db: dbDependency):
     return False
 
 
-def createToken(username: str, userID: int, expireDelta: timedelta):
-    encode = {"sub": username, "id": userID}
+def createToken(username: str, userID: int, role: str, expireDelta: timedelta):
+    encode = {"sub": username, "id": userID, "role": role}
     expires = datetime.now(timezone.utc) + expireDelta
     encode.update({"exp": expires})
     return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -48,14 +48,17 @@ def createToken(username: str, userID: int, expireDelta: timedelta):
 
 async def getUser(token: Annotated[str, Depends(oauth2_bearer)]):
     try:
+        print(token)
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print("chck")
         username:str = payload.get("sub")
         userID:int = payload.get("id")
         if username is None or userID is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
         return {"username": username, "userID": userID}
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
+        print(JWTError)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate")
 
 
 
@@ -77,12 +80,11 @@ async def createUser(db: dbDependency, createUserRequest: CreateUserRequest):
 @router.post("/token", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def loginToken(formData: Annotated[OAuth2PasswordRequestForm, Depends()], db: dbDependency):
     user = authenticateUser(username=formData.username, password=formData.password, db=db)
-    if user:
-        token = createToken(user.username, user.id, timedelta(minutes=20))
-        return {"accessToken":token, "tokenType": "bearer"}
-    else:
+    if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
-
+        
+    token = createToken(user.username, user.id, timedelta(minutes=20))
+    return {"accessToken":token, "tokenType": "bearer"}
 
 
 @router.get("/users")
