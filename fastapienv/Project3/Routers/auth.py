@@ -32,11 +32,13 @@ def getDB():
 dbDependency = Annotated[Session, Depends(getDB)]
 
 
-def authenticateUser(username: str, password: str, db: dbDependency):
+def authenticateUser(username: str, password: str, db):
     user = db.query(Users).filter(username == Users.username).first()
-    if user and bcrypt_context.verify(password, user.hashedPassword):
-        return user
-    return False
+    if not user:
+        return False
+    if not bcrypt_context.verify(password, user.hashedPassword):
+        return False
+    return user
 
 
 def createToken(username: str, userID: int, role: str, expireDelta: timedelta):
@@ -83,8 +85,8 @@ async def loginToken(formData: Annotated[OAuth2PasswordRequestForm, Depends()], 
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
         
-    token = createToken(user.username, user.id, timedelta(minutes=20))
-    return {"accessToken":token, "tokenType": "bearer"}
+    token = createToken(user.username, user.id, user.role, timedelta(minutes=20))
+    return {"access_token":token, "token_type": "bearer"}
 
 
 @router.get("/users")
